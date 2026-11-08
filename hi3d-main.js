@@ -4,9 +4,11 @@ import {OrbitControls} from './vendor/OrbitControls.js';
 import {GameState,SETTINGS,ZODIAC,LABELS,UPGRADES,LEVELS} from './hi3d-rules.js';
 import {FairPhysics,initPhysics} from './hi3d-physics.js';
 import {configureCharacters,arrangeCharacters} from './hi3d-responsive-layout.js';
+import {FairSoundscape} from './hi3d-soundscape.js';
 
 const $=id=>document.getElementById(id), show=(id,on)=>$(id).classList.toggle('hidden',!on);
 const game=new GameState(), loader=new GLTFLoader(), scene=new THREE.Scene();
+const soundscape=new FairSoundscape({onWarning:message=>toast(message)});
 const sceneRoot=new THREE.Group();scene.add(sceneRoot);
 let renderer,camera,physics,characters=[],mode='high',pointerDown=null,acc=0,last=performance.now(),sim=0;
 let currentWind=0,windPhase='off',previousPhase='ready',closingAnnounced=false,toastUntil=0,callUntil=0,slow=0,lastSound=0;
@@ -35,13 +37,12 @@ let fan,fanBlades,keeperArm;const effects=[];
 function toast(message){$('toast').textContent=message;$('toast').style.opacity='1';toastUntil=performance.now()+2400;}
 function call(message,sub=''){const el=$('callout');el.replaceChildren(document.createTextNode(message));if(sub){const s=document.createElement('small');s.textContent=sub;el.append(s);}el.style.opacity='1';callUntil=performance.now()+1800;}
 function ensureAudio(){
- if(!audio){try{audio=new (window.AudioContext||window.webkitAudioContext)();audioMaster=audio.createGain();audioMaster.gain.value=soundOn?.16:0;audioMaster.connect(audio.destination);}catch{return;}}
- if(audio.state==='suspended')audio.resume().catch(()=>{});
+ soundscape.unlock();audio=soundscape.context;audioMaster=soundscape.effectsGain;
 }
 function tone(freq=440,length=.12,type='sine',vol=.4,delay=0){
  if(!audio||!soundOn)return;const t=audio.currentTime+delay,o=audio.createOscillator(),g=audio.createGain();o.type=type;o.frequency.setValueAtTime(freq,t);g.gain.setValueAtTime(.001,t);g.gain.exponentialRampToValueAtTime(vol,t+.009);g.gain.exponentialRampToValueAtTime(.001,t+length);o.connect(g);g.connect(audioMaster);o.start(t);o.stop(t+length+.02);o.onended=()=>{o.disconnect();g.disconnect();};
 }
-function hitSound(){[523,659,784,1047].forEach((n,i)=>tone(n,.19,'sine',.5,i*.045));}
+function hitSound(){soundscape.effect('applause',{volume:.65});[523,659,784,1047].forEach((n,i)=>tone(n,.19,'sine',.5,i*.045));}
 function confetti(position,color=0xffce69,count=24){
  const geo=new THREE.BufferGeometry(),positions=new Float32Array(count*3),vel=[];
  for(let i=0;i<count;i++){positions.set(position.toArray(),i*3);const a=i*2.39996;vel.push(new THREE.Vector3(Math.cos(a)*(1+i%3*.3),2+i%5*.3,Math.sin(a)*(1+i%3*.3)));}
@@ -163,7 +164,7 @@ function setMode(next){mode=next;$('high').classList.toggle('active',mode==='hig
 function releaseThrow(){
  if(!pointerDown)return;pointerDown=null;show('drag-power',false);
  const token=game.consume(physics.live);if(!token){if(physics.live>=SETTINGS.maxLive)toast('场上圈太多，等一圈落定再投');return;}
- physics.launch(aim,mode,token);tone(mode==='high'?330:420,.1,'triangle',.28);syncHud();
+ physics.launch(aim,mode,token);soundscape.effect('throw',{volume:.8,rate:mode==='high'?1:1.15});syncHud();
 }
 function clearDrag(){pointerDown=null;show('drag-power',false);}
 function bindInput(){
@@ -209,7 +210,7 @@ function onHit(c,ring){
 }
 function onMiss(r){if(game.phase!=='playing')return false;game.miss();if(game.misses%3===0)toast(game.perks.has('rescue')?'空圈回响：返还1圈':'别急，对准脚下再投一次');syncHud();return true;}
 function onBounce(r){
- if(performance.now()-lastSound>85){tone(160+r.bounces*35,.065,'triangle',.16);lastSound=performance.now();}
+ if(performance.now()-lastSound>85){soundscape.effect('bounce',{volume:.6,rate:1+Math.min(r.bounces,5)*.05});lastSound=performance.now();}
  if(r.bounces===1){const p=r.body.translation();const near=characters.some(c=>Math.hypot((c.currentX??c.position[0])-p.x,c.position[2]-p.z)<.85&&p.y>c.position[1]+.4);if(near&&game.combo>=2)slow=.22;}
 }
 function windUpdate(){
@@ -226,6 +227,7 @@ function windUpdate(){
  return closing;
 }
 function syncHud(){
+ soundscape.setState(game.phase);
  $('game').dataset.phase=game.phase;
  $('score').textContent=game.score.toLocaleString('zh-CN');$('rings').textContent=game.mode==='practice'?'∞':game.goldReady?'金圈':game.rings;
  const t=Math.ceil(game.time);$('timer').textContent=game.mode==='practice'?'练习':`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
@@ -276,6 +278,7 @@ function syncPhase(){
  previousPhase=game.phase;
 }
 function frame(now){
+ soundscape.setState(game.phase);
  requestAnimationFrame(frame);if(!ready)return;if(controls&&inspecting)controls.update();
  let dt=Math.min((now-last)/1000,.08);last=now;
  if(game.phase==='playing'){
@@ -355,7 +358,7 @@ async function boot(){
    inspectRing:()=>physics.items.map(r=>({meshRadius:r.radius,colliders:r.colliderHandles.length})),
    forceTimerForTest:t=>{game.time=t;},forceRingsForTest:n=>{game.rings=n;},
    scene:()=>({matteNodes:scene.getObjectsByProperty('visible',true).filter(o=>o.name.startsWith('matte_')).length,environmentMeshes:sceneRoot.getObjectsByProperty('isMesh',true).length,backgroundIsColor:scene.background?.isColor,models:characters.map(c=>({id:c.id,model:c.model,triangles:c.triangles}))}),
-   inspect:toggleInspection,render:()=>renderer.render(scene,camera)
+   inspect:toggleInspection,render:()=>renderer.render(scene,camera),audio:()=>soundscape.snapshot()
   };
  }catch(e){$('load-detail').textContent=`加载失败：${e.message}。可重新加载，或下载场景。`;$('loading').querySelector('.loading-ring').style.animation='none';show('retry-load',true);console.error(e);}
 }
@@ -372,7 +375,7 @@ function addLampGlows(){
 }
 $('inspect-scene').onclick=toggleInspection;
 $('start').onclick=()=>startGame(false);$('practice').onclick=()=>startGame(true);$('pause').onclick=togglePause;$('help').onclick=showHelp;
-$('sound').onclick=()=>{soundOn=!soundOn;ensureAudio();if(audioMaster)audioMaster.gain.value=soundOn?.16:0;$('sound').querySelector('use').setAttribute('href',soundOn?'#icon-music':'#icon-mute');$('sound').setAttribute('aria-label',soundOn?'关闭声音':'开启声音');toast(soundOn?'声音已开启':'声音已关闭');};
+$('sound').onclick=()=>{soundOn=!soundOn;soundscape.setEnabled(soundOn);ensureAudio();$('sound').querySelector('use').setAttribute('href',soundOn?'#icon-music':'#icon-mute');$('sound').setAttribute('aria-label',soundOn?'关闭声音':'开启声音');toast(soundOn?'声音已开启 · 轻音乐与人群氛围':'声音已关闭');};
 $('follow-camera').onclick=()=>{followEnabled=!followEnabled;syncFollowButton();};
 function syncFollowButton(){$('follow-camera').textContent=`跟圈镜头 · ${followEnabled?'开':'关'}`;$('follow-camera').setAttribute('aria-pressed',String(followEnabled));}
 syncFollowButton();
