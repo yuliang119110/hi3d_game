@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from './vendor/rapier.es.js';
 import {SETTINGS} from './hi3d-rules.js';
+import {validateGestureLaunch,ringEnergy} from './hi3d-gesture-motion.js';
 
 export async function initPhysics(){await RAPIER.init();}
 const V=new THREE.Vector3();
@@ -35,8 +36,10 @@ export class FairPhysics{
   const d=Math.hypot(end.x-start.x,end.z-start.z);const t=(mode==='high'?1.8+d*.070:1.04+d*.018);
   return {start,end,t,velocity:new THREE.Vector3((end.x-start.x)/t,(end.y-start.y)/t+.5*SETTINGS.gravity*t,(end.z-start.z)/t)};
  }
- launch(aim,mode,token){
-  const sol=this.solution(aim,mode);const radius=token.radius;
+ launchGesture(spec,token){return this.launch(null,'gesture',token,validateGestureLaunch(spec));}
+ telemetry(r){if(!r||!this.items.includes(r))return null;const p=r.body.translation(),v=r.body.linvel();return {...ringEnergy(r.launchMass,[p.x,p.y,p.z],[v.x,v.y,v.z],SETTINGS.gravity),source:r.source,done:r.done,position:[p.x,p.y,p.z],velocity:[v.x,v.y,v.z]};}
+ launch(aim,mode,token,custom=null){
+  const sol=custom?{start:new THREE.Vector3(...custom.position),velocity:new THREE.Vector3(...custom.velocity),t:0}:this.solution(aim,mode);const radius=token.radius;
   const mesh=new THREE.Mesh(new THREE.TorusGeometry(radius,SETTINGS.tube,8,56),new THREE.MeshStandardMaterial({color:token.gold?0xffd551:0xffae42,metalness:.65,roughness:.27,emissive:0xa33e02,emissiveIntensity:token.gold?.6:.15}));
   // Ring local XZ plane, with a real empty center in both mesh and compound collider.
   mesh.geometry.rotateX(-Math.PI/2);mesh.castShadow=true;mesh.receiveShadow=true;this.scene.add(mesh);
@@ -47,7 +50,9 @@ export class FairPhysics{
    const p=new THREE.Vector3(Math.cos(a)*radius,0,Math.sin(a)*radius),q=new THREE.Vector3(Math.cos(b)*radius,0,Math.sin(b)*radius);
    const dir=q.clone().sub(p);const mid=p.clone().add(q).multiplyScalar(.5);
    const rot=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());
-   const col=this.world.createCollider(RAPIER.ColliderDesc.capsule(p.distanceTo(q)/2,SETTINGS.tube).setTranslation(mid.x,mid.y,mid.z).setRotation(rot).setDensity(.35).setRestitution(mode==='high'?.16:.28).setFriction(.48).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS),body);
+   const desc=RAPIER.ColliderDesc.capsule(p.distanceTo(q)/2,SETTINGS.tube).setTranslation(mid.x,mid.y,mid.z).setRotation(rot).setDensity(.35).setRestitution(mode==='high'?.16:.28).setFriction(.48).setActiveEvents(RAPIER.ActiveEvents.COLLISION_EVENTS);
+   if(custom)desc.setMass(custom.mass/segments);
+   const col=this.world.createCollider(desc,body);
    colliderHandles.push(col.handle);
   }
   const descent=new THREE.Vector3(-sol.velocity.x,SETTINGS.gravity*sol.t-sol.velocity.y,-sol.velocity.z).normalize();
@@ -55,8 +60,8 @@ export class FairPhysics{
   // Low throws retain their inclined entry and more pronounced bounce.
   if(mode==='high')descent.set(0,1,0);
   const tilt=new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),descent);
-  body.setRotation(tilt,true);body.setLinvel(sol.velocity,true);body.setAngvel({x:descent.x*3,y:descent.y*3,z:descent.z*3},true);
-  const r={body,mesh,radius,age:0,done:false,settle:0,candidate:null,gold:token.gold,colliderHandles,bounces:0,mode};this.items.push(r);this.syncOne(r);return r;
+  body.setRotation(custom?new THREE.Quaternion(...custom.rotation):tilt,true);body.setLinvel(sol.velocity,true);body.setAngvel(custom?{x:custom.angularVelocity[0],y:custom.angularVelocity[1],z:custom.angularVelocity[2]}:{x:descent.x*3,y:descent.y*3,z:descent.z*3},true);
+  const r={body,mesh,radius,age:0,done:false,settle:0,candidate:null,gold:token.gold,colliderHandles,bounces:0,mode,source:custom?'gesture':'pointer',launchMass:body.mass()};this.items.push(r);this.syncOne(r);return r;
  }
  moveTargets(elapsed,closing){
   for(const t of this.targetBodies){

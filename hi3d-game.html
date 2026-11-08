@@ -2,6 +2,7 @@
 <html lang="zh-CN"><head>
  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#641611">
  <title>满堂福气 · 十二生肖套圈</title><link rel="icon" href="data:,"><link rel="stylesheet" href="./hi3d-responsive.css">
+ <link rel="stylesheet" href="./hi3d-gesture.css">
  <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
 </head><body>
  <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
@@ -23,7 +24,7 @@
    <div class="score-box ink-panel"><svg class="coin" aria-hidden="true"><use href="#icon-coin"/></svg><div><small>本局铜钱</small><strong id="score">0</strong></div></div>
    <div class="brand"><span>新春游园会</span><b>一圈套住 · 满堂福气</b></div>
    <div class="stage-tag ink-panel"><span id="level-name">新手关 · 高抛入门</span><strong id="timer">02:00</strong><small id="goal">套齐 8 种生肖即可通关</small></div>
-   <nav aria-label="游戏设置"><button id="sound" class="round" aria-label="关闭声音" title="声音"><svg class="icon"><use href="#icon-music"/></svg></button><button id="help" class="round" aria-label="查看玩法" title="玩法"><svg class="icon"><use href="#icon-help"/></svg></button><button id="pause" class="round" aria-label="暂停游戏" title="暂停 / Esc"><svg class="icon"><use href="#icon-pause"/></svg></button></nav>
+   <nav aria-label="游戏设置"><button id="gesture-toggle" class="round" aria-label="开启摄像头手势模式" aria-pressed="false" title="摄像头手势模式"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="7" width="18" height="13" rx="3"/><path d="m8 7 2-3h4l2 3"/><circle cx="12" cy="13" r="3"/></svg><span class="gesture-badge">手势</span></button><button id="sound" class="round" aria-label="关闭声音" title="声音"><svg class="icon"><use href="#icon-music"/></svg></button><button id="help" class="round" aria-label="查看玩法" title="玩法"><svg class="icon"><use href="#icon-help"/></svg></button><button id="pause" class="round" aria-label="暂停游戏" title="暂停 / Esc"><svg class="icon"><use href="#icon-pause"/></svg></button></nav>
   </header>
   <section id="playfield" aria-label="三维套圈摊位">
    <div id="viewport"></div><div class="vignette"></div>
@@ -41,6 +42,17 @@
    <div class="menu-heading"><div><span class="eyebrow">灯火正好 · 好戏开场</span><h1>套一圈，讨个好彩头</h1></div><svg class="cloud-art" aria-hidden="true"><use href="#icon-cloud"/></svg><p id="level-description">奖品不动，专心练高抛落点</p></div>
    <div id="level-select" aria-label="关卡"></div><div class="menu-actions"><button id="start" class="primary" disabled><svg aria-hidden="true"><use href="#icon-ring"/></svg><span>正在布置摊位</span><svg class="icon"><use href="#icon-arrow"/></svg></button><button id="practice" class="text-button" disabled>先练练手 · 不限圈数</button></div>
   </section>
+  <aside id="gesture-panel" hidden aria-label="摄像头手势投圈">
+   <header><strong>手势投圈</strong><button id="gesture-minimize" aria-label="收起摄像头预览" aria-expanded="true">−</button><button id="gesture-close" aria-label="关闭手势模式">×</button></header>
+   <div id="gesture-camera"><video id="gesture-video" muted playsinline></video><canvas id="gesture-canvas" width="320" height="240"></canvas></div>
+   <strong id="gesture-status" role="status" aria-live="polite">摄像头已关闭</strong>
+   <p id="gesture-instruction">手腕收回肩前，停一下取圈；向前上方挥手出圈</p>
+   <label>投圈手<select id="gesture-hand" aria-label="选择投圈手"><option value="right">右手</option><option value="left">左手</option></select></label>
+   <div class="gesture-track" aria-hidden="true"><i id="gesture-power"></i></div>
+   <dl id="gesture-physics"><div><dt>速度</dt><dd id="gesture-speed">0.00 m/s</dd></div><div><dt>高度</dt><dd id="gesture-height">0.00 m</dd></div><div><dt>平动动能</dt><dd id="gesture-kinetic">0.00 J</dd></div><div><dt>重力势能</dt><dd id="gesture-potential">0.00 J</dd></div></dl>
+   <p class="gesture-note">圈质量 0.18 kg · g=9.81 m/s²<br>视频仅在本机识别，不上传。动作映射为游戏单位，不用于人体测量。</p>
+   <button id="gesture-retry" hidden>重新开启摄像头</button>
+  </aside>
   <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section id="modal-content"></section></div>
   <div id="loading"><span class="loading-ring"></span><strong>灯笼已亮，福气将至</strong><p id="load-detail">正在准备三维摊位</p><button id="retry-load" class="secondary hidden">重新加载</button><a href="./assets/hi3d-fair-full3d.glb" download>下载场景模型</a></div>
  </main>

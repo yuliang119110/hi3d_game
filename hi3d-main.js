@@ -5,10 +5,15 @@ import {GameState,SETTINGS,ZODIAC,LABELS,UPGRADES,LEVELS} from './hi3d-rules.js'
 import {FairPhysics,initPhysics} from './hi3d-physics.js';
 import {configureCharacters,arrangeCharacters} from './hi3d-responsive-layout.js';
 import {FairSoundscape} from './hi3d-soundscape.js';
+import {GestureThrowController} from './hi3d-gesture-controller.js';
+import {GestureRingView} from './hi3d-gesture-view.js';
 
 const $=id=>document.getElementById(id), show=(id,on)=>$(id).classList.toggle('hidden',!on);
 const game=new GameState(), loader=new GLTFLoader(), scene=new THREE.Scene();
 const soundscape=new FairSoundscape({onWarning:message=>toast(message)});
+const gestureView=new GestureRingView(scene);
+let gestureFrame=null,lastGestureRing=null,lastGestureStats=null,lastGestureUI=0;
+const gestures=new GestureThrowController({canThrow:()=>ready&&!inspecting&&game.canThrow(physics?.live??0),onFrame:state=>{gestureFrame=state;},onThrow:launch=>releaseGestureThrow(launch),onCancel:()=>{gestureFrame=null;gestureView.hide();},onToggle:enabled=>{clearDrag();$('high').disabled=enabled;$('low').disabled=enabled;$('input-hint').textContent=enabled?'收手持圈 · 前上方挥手出圈':'点选玩偶 · 拖动微调 · 松手投圈';if(enabled)ensureAudio();}});
 const sceneRoot=new THREE.Group();scene.add(sceneRoot);
 let renderer,camera,physics,characters=[],mode='high',pointerDown=null,acc=0,last=performance.now(),sim=0;
 let currentWind=0,windPhase='off',previousPhase='ready',closingAnnounced=false,toastUntil=0,callUntil=0,slow=0,lastSound=0;
@@ -151,7 +156,7 @@ function screenAim(clientX,clientY){
  return aim;
 }
 function aimVisual(){
- const visible=ready&&!inspecting&&game.phase==='playing';arc.visible=visible;marker.visible=visible;markerDot.visible=visible;
+ const visible=ready&&!inspecting&&game.phase==='playing'&&!gestures.active;arc.visible=visible;marker.visible=visible;markerDot.visible=visible;
  show('aim-label',visible);if(!visible)return;
  const solution=physics.solution(aim,mode),attr=arc.geometry.attributes.position;
  for(let i=0;i<48;i++){const t=i/47*solution.t;attr.setXYZ(i,solution.start.x+solution.velocity.x*t+.5*currentWind*t*t,solution.start.y+solution.velocity.y*t-.5*SETTINGS.gravity*t*t,solution.start.z+solution.velocity.z*t);}
@@ -167,15 +172,29 @@ function releaseThrow(){
  physics.launch(aim,mode,token);soundscape.effect('throw',{volume:.8,rate:mode==='high'?1:1.15});syncHud();
 }
 function clearDrag(){pointerDown=null;show('drag-power',false);}
+function releaseGestureThrow(launch){
+ if(!ready||inspecting||document.hidden)return false;
+ const token=game.consume(physics.live);if(!token)return false;
+ lastGestureRing=physics.launchGesture(launch,token);lastGestureStats=physics.telemetry(lastGestureRing);soundscape.effect('throw',{volume:.8});syncHud();return true;
+}
+function updateGestureDisplay(now){
+ gestures.setPhase(game.phase);gestures.watchdog(now);
+ const radius=SETTINGS.radius*(game.perks.has('wide')?1.12:1)*(game.goldReady?1.18:1);
+ gestureView.update(gestureFrame,{visible:gestures.active&&!inspecting&&game.phase==='playing',radius,wind:currentWind});
+ if(!gestures.active||now-lastGestureUI<100)return;lastGestureUI=now;
+ if(lastGestureRing)lastGestureStats=physics.telemetry(lastGestureRing)??lastGestureStats;
+ const stats=lastGestureStats;if(!stats)return;
+ $('gesture-speed').textContent=stats.speed.toFixed(2)+' m/s';$('gesture-height').textContent=stats.height.toFixed(2)+' m';$('gesture-kinetic').textContent=stats.kinetic.toFixed(2)+' J';$('gesture-potential').textContent=stats.potential.toFixed(2)+' J';
+}
 function bindInput(){
  const canvas=renderer.domElement;
  canvas.addEventListener('pointerdown',e=>{
-  if(inspecting||e.button!==0||!ready||game.phase!=='playing')return;ensureAudio();screenAim(e.clientX,e.clientY);
+  if(gestures.active||inspecting||e.button!==0||!ready||game.phase!=='playing')return;ensureAudio();screenAim(e.clientX,e.clientY);
   if(!game.canThrow(physics.live)){toast(game.cooldown>0?'稍等一下，马上可以再投':'等场上的圈落定');return;}
   pointerDown={id:e.pointerId,x:e.clientX,y:e.clientY,aim:aim.clone()};canvas.setPointerCapture(e.pointerId);show('drag-power',true);
  });
  canvas.addEventListener('pointermove',e=>{
-  if(inspecting||!ready||game.phase!=='playing')return;
+  if(gestures.active||inspecting||!ready||game.phase!=='playing')return;
   if(pointerDown&&pointerDown.id===e.pointerId){
    const rect=canvas.getBoundingClientRect(),dx=(e.clientX-pointerDown.x)/rect.width*10,dy=(e.clientY-pointerDown.y)/rect.height;
    aim.copy(pointerDown.aim);aim.x=THREE.MathUtils.clamp(aim.x+dx,-layout.bounds.x,layout.bounds.x);aim.z=THREE.MathUtils.clamp(aim.z-dy*5.5,layout.bounds.farZ,layout.bounds.nearZ);
@@ -190,9 +209,9 @@ function bindInput(){
   if(e.code==='Tab'&&!$('modal').classList.contains('hidden')){const buttons=[...$('modal').querySelectorAll('button:not(:disabled),a')],first=buttons[0],last=buttons.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}return;}
   if(inspecting){if(e.code==='Escape')toggleInspection();return;}
   if(e.code==='Escape'||e.code==='KeyP'){e.preventDefault();if($('help-close'))$('help-close').click();else togglePause();return;}
-  if(e.target.closest('button,a,input'))return;
+  if(e.target.closest('button,a,input,select,textarea,[contenteditable="true"]')||gestures.active)return;
   if(e.code==='Digit1')setMode('high');if(e.code==='Digit2')setMode('low');
-  if(e.code==='Space'&&game.phase==='playing'){e.preventDefault();ensureAudio();pointerDown={id:-1};releaseThrow();}
+  if(e.code==='Space'&&game.phase==='playing'&&!gestures.active){e.preventDefault();ensureAudio();pointerDown={id:-1};releaseThrow();}
   if(e.code==='ArrowLeft'){aim.x=Math.max(-layout.bounds.x,aim.x-.16);e.preventDefault();}if(e.code==='ArrowRight'){aim.x=Math.min(layout.bounds.x,aim.x+.16);e.preventDefault();}
   if(e.code==='ArrowUp'){aim.z=Math.max(layout.bounds.farZ,aim.z-.18);e.preventDefault();}if(e.code==='ArrowDown'){aim.z=Math.min(layout.bounds.nearZ,aim.z+.18);e.preventDefault();}
  });
@@ -228,6 +247,7 @@ function windUpdate(){
 }
 function syncHud(){
  soundscape.setState(game.phase);
+ gestures.setPhase(game.phase);
  $('game').dataset.phase=game.phase;
  $('score').textContent=game.score.toLocaleString('zh-CN');$('rings').textContent=game.mode==='practice'?'∞':game.goldReady?'金圈':game.rings;
  const t=Math.ceil(game.time);$('timer').textContent=game.mode==='practice'?'练习':`${String(Math.floor(t/60)).padStart(2,'0')}:${String(t%60).padStart(2,'0')}`;
@@ -243,6 +263,7 @@ function syncHud(){
 }
 function syncTargetPositions(){for(const t of physics.targetBodies){t.c.currentX=t.x;t.c.root.position.x=t.x;if(t.c.stand)t.c.stand.position.x=t.c.standBaseX+t.x-t.c.position[0];}}
 function startGame(practice=false,level=currentLevel){
+ gestures.cancelHold();lastGestureRing=null;lastGestureStats=null;
  if(!ready)return;currentLevel=practice?0:level;ensureAudio();clearDrag();game.reset(practice?'practice':'challenge',currentLevel);physics.motion=game.level.motion;physics.reset();starTimer=0;if(starMesh)starMesh.visible=false;$('level-name').textContent=practice?'练习场 · 不限圈':game.level.name;
  for(const c of characters){c.root.position.copy(c.originalPosition);c.root.scale.setScalar(1);c.currentX=c.position[0];c.flash=0;if(c.stand)c.stand.position.x=c.standBaseX;}
  for(const e of effects){scene.remove(e.mesh);e.mesh.geometry.dispose();e.mesh.material.dispose();}effects.length=0;
@@ -279,6 +300,7 @@ function syncPhase(){
 }
 function frame(now){
  soundscape.setState(game.phase);
+ updateGestureDisplay(now);
  requestAnimationFrame(frame);if(!ready)return;if(controls&&inspecting)controls.update();
  let dt=Math.min((now-last)/1000,.08);last=now;
  if(game.phase==='playing'){
@@ -358,7 +380,8 @@ async function boot(){
    inspectRing:()=>physics.items.map(r=>({meshRadius:r.radius,colliders:r.colliderHandles.length})),
    forceTimerForTest:t=>{game.time=t;},forceRingsForTest:n=>{game.rings=n;},
    scene:()=>({matteNodes:scene.getObjectsByProperty('visible',true).filter(o=>o.name.startsWith('matte_')).length,environmentMeshes:sceneRoot.getObjectsByProperty('isMesh',true).length,backgroundIsColor:scene.background?.isColor,models:characters.map(c=>({id:c.id,model:c.model,triangles:c.triangles}))}),
-   inspect:toggleInspection,render:()=>renderer.render(scene,camera),audio:()=>soundscape.snapshot()
+   inspect:toggleInspection,render:()=>renderer.render(scene,camera),audio:()=>soundscape.snapshot(),
+   gesture:{state:()=>gestures.snapshot(),freezeInference:on=>{gestures.testInferencePaused=!!on;},feed:(landmarks,time)=>gestures.handleResults({poseLandmarks:landmarks},time),telemetry:()=>lastGestureRing?physics.telemetry(lastGestureRing):null,held:()=>({visible:gestureView.ring.visible&&gestureView.group.visible,position:gestureView.ring.position.toArray()}),launch:spec=>releaseGestureThrow(spec),step:seconds=>{for(let i=0;i<seconds/SETTINGS.step;i++)physics.step(SETTINGS.step,0,game.elapsed,false);return physics.telemetry(lastGestureRing);}}
   };
  }catch(e){$('load-detail').textContent=`加载失败：${e.message}。可重新加载，或下载场景。`;$('loading').querySelector('.loading-ring').style.animation='none';show('retry-load',true);console.error(e);}
 }
