@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN"><head>
+ <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="theme-color" content="#641611">
+ <title>满堂福气 · 十二生肖套圈</title><link rel="icon" href="data:,"><link rel="stylesheet" href="./hi3d-responsive.css">
+ <script type="importmap">{"imports":{"three":"./vendor/three.module.js"}}</script>
+</head><body>
+ <svg class="svg-definitions" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+  <linearGradient id="coin-gold" x2=".5" y2="1"><stop stop-color="#fff2b9"/><stop offset=".55" stop-color="#ffd36c"/><stop offset="1" stop-color="#d18a30"/></linearGradient>
+  <symbol id="icon-coin" viewBox="0 0 64 64"><path d="M32 4C48 3 60 16 59 33S46 61 30 60 3 47 4 30 17 4 32 4Z" fill="#9c4d14" stroke="#6d2b0a" stroke-width="2"/><path d="M31 3C47 3 59 15 58 31S46 58 31 57 4 45 5 30 16 3 31 3Z" fill="url(#coin-gold)" stroke="#fff0ad" stroke-width="2"/><path d="M16 14Q30 2 45 14M12 22Q5 39 20 48M48 19Q60 38 43 49" fill="none" stroke="#fff1ac" stroke-width="2" stroke-linecap="round"/><circle cx="31.5" cy="30.5" r="18.5" fill="none" stroke="#c18330" stroke-width="2"/><path d="m25 24 13-.5.5 13-13 .5Z" fill="#a4541c" stroke="#ffe293" stroke-width="2"/><path d="M30 14v5M30 43v5M15 30h5M43 30h5" stroke="#a45a21" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-ring" viewBox="0 0 48 48"><ellipse cx="24" cy="25" rx="19" ry="16" fill="none" stroke="#b5752a" stroke-width="7"/><ellipse cx="24" cy="22" rx="19" ry="16" fill="none" stroke="#ffe8a4" stroke-width="5"/><path d="M8 18q3-8 12-10M32 35l5-3" fill="none" stroke="#fff8d8" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-pause" viewBox="0 0 24 24"><path d="M8 6v12M16 6v12"/></symbol>
+  <symbol id="icon-play" viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z"/></symbol>
+  <symbol id="icon-music" viewBox="0 0 24 24"><path d="M9 17V5l10-2v12M9 7l10-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="16" cy="16" rx="3" ry="2"/></symbol>
+  <symbol id="icon-mute" viewBox="0 0 24 24"><path d="M9 17V5l10-2v9M9 7l10-2M14 15l7 7m0-7-7 7"/><ellipse cx="6" cy="18" rx="3" ry="2"/></symbol>
+  <symbol id="icon-help" viewBox="0 0 24 24"><path d="M8 8c0-6 10-6 9 0-.5 3-5 3-5 6m0 4v.4"/></symbol>
+  <symbol id="icon-orbit" viewBox="0 0 24 24"><path d="m8 8 4-2 4 2v6l-4 2-4-2Zm0 0 4 2 4-2m-4 2v6M5 10C-4 15 5 23 17 18l3-2m-1-4 1 4-4 1"/></symbol>
+  <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M4 12h16m-6-6 6 6-6 6"/></symbol>
+  <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V6a4 4 0 0 1 8 0v4m-4 5v2"/></symbol>
+  <symbol id="icon-cloud" viewBox="0 0 120 40"><path d="M3 30h92c25 0 21-22 8-20-2-14-30-9-29 4C62-2 42 3 43 17 22 6 17 30 35 30h25M79 20c12-8 20 9 5 10"/></symbol>
+ </defs></svg>
+ <main data-phase="ready" id="game" aria-label="十二生肖套圈游戏">
+  <header id="hud">
+   <div class="score-box ink-panel"><svg class="coin" aria-hidden="true"><use href="#icon-coin"/></svg><div><small>本局铜钱</small><strong id="score">0</strong></div></div>
+   <div class="brand"><span>新春游园会</span><b>一圈套住 · 满堂福气</b></div>
+   <div class="stage-tag ink-panel"><span id="level-name">新手关 · 高抛入门</span><strong id="timer">02:00</strong><small id="goal">套齐 8 种生肖即可通关</small></div>
+   <nav aria-label="游戏设置"><button id="sound" class="round" aria-label="关闭声音" title="声音"><svg class="icon"><use href="#icon-music"/></svg></button><button id="help" class="round" aria-label="查看玩法" title="玩法"><svg class="icon"><use href="#icon-help"/></svg></button><button id="pause" class="round" aria-label="暂停游戏" title="暂停 / Esc"><svg class="icon"><use href="#icon-pause"/></svg></button></nav>
+  </header>
+  <section id="playfield" aria-label="三维套圈摊位">
+   <div id="viewport"></div><div class="vignette"></div>
+   <div class="stage-tools"><button id="inspect-scene" class="tool-button"><svg class="icon"><use href="#icon-orbit"/></svg><span>环视摊位</span></button><button id="follow-camera" class="tool-button" aria-pressed="true">跟圈镜头 · 开</button></div>
+   <div id="scene-hint" class="hidden">拖动环视 · 双指缩放</div><div id="weather" class="ribbon hidden"></div><div id="fever" class="fever hidden">满堂喝彩 <span>免耗圈</span></div>
+   <div id="callout" role="status" aria-live="polite"></div><div id="combo"></div><div id="aim-label" class="hidden"></div><div id="toast" role="status"></div>
+   <div id="drag-power" class="hidden"><span>调整落点</span><i></i></div><div id="asset-warning" class="hidden"></div>
+  </section>
+  <footer id="play-dock">
+   <div class="rings-box ink-panel"><svg class="ring-symbol" aria-hidden="true"><use href="#icon-ring"/></svg><div><small>手中圈数</small><strong id="rings">36</strong></div><button id="gold" class="hidden">5 圈换金圈</button></div>
+   <div class="collection"><div class="collection-label"><span>生肖集福</span><b id="collected">0 / 12</b><aside id="crowd"><span>热闹值</span><div class="crowd-track"><i id="noise"></i></div><strong id="crowd-text">好戏开场</strong></aside></div><div id="zodiac"></div><div id="perk-list"></div></div>
+   <div class="throw-controls"><div class="segmented" role="group" aria-label="投掷方式"><button id="high" class="active" aria-pressed="true">高抛 <kbd>1</kbd></button><button id="low" aria-pressed="false">低抛 <kbd>2</kbd></button></div><small id="input-hint">点选玩偶 · 拖动微调 · 松手投圈</small></div>
+  </footer>
+  <section id="panel" class="ready-panel" aria-label="选择关卡">
+   <div class="menu-heading"><div><span class="eyebrow">灯火正好 · 好戏开场</span><h1>套一圈，讨个好彩头</h1></div><svg class="cloud-art" aria-hidden="true"><use href="#icon-cloud"/></svg><p id="level-description">奖品不动，专心练高抛落点</p></div>
+   <div id="level-select" aria-label="关卡"></div><div class="menu-actions"><button id="start" class="primary" disabled><svg aria-hidden="true"><use href="#icon-ring"/></svg><span>正在布置摊位</span><svg class="icon"><use href="#icon-arrow"/></svg></button><button id="practice" class="text-button" disabled>先练练手 · 不限圈数</button></div>
+  </section>
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title"><section id="modal-content"></section></div>
+  <div id="loading"><span class="loading-ring"></span><strong>灯笼已亮，福气将至</strong><p id="load-detail">正在准备三维摊位</p><button id="retry-load" class="secondary hidden">重新加载</button><a href="./assets/hi3d-fair-full3d.glb" download>下载场景模型</a></div>
+ </main>
+ <script type="module" src="./hi3d-main.js"></script>
+</body></html>
