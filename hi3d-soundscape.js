@@ -1,5 +1,6 @@
 const MUSIC = new URL('./assets/audio/hi3d-year-of-the-iron-dragon.mp3',import.meta.url);
 const CROWD = new URL('./assets/audio/hi3d-crowd-murmur.mp3',import.meta.url);
+const CHILDREN = new URL('./assets/audio/hi3d-children-playful.mp3',import.meta.url);
 const EFFECTS = {
   throw: new URL('./assets/audio/hi3d-ring-whoosh.mp3',import.meta.url),
   bounce: new URL('./assets/audio/hi3d-ring-tap.mp3',import.meta.url),
@@ -23,7 +24,7 @@ export class FairSoundscape {
         this.output=c.createDynamicsCompressor();this.output.threshold.value=-12;this.output.knee.value=12;this.output.ratio.value=4;
         this.output.connect(c.destination);
         this.effectsGain=c.createGain();this.effectsGain.gain.value=.16;this.effectsGain.connect(this.output);
-        this.music=this.createLoop('music',MUSIC);this.crowd=this.createLoop('crowd',CROWD);
+        this.music=this.createLoop('music',MUSIC);this.crowd=this.createLoop('crowd',CROWD);this.children=this.createLoop('children',CHILDREN);
       }
       if(this.context.state==='suspended')this.context.resume().catch(()=>this.warning('unlock','点击声音按钮可重新开启声音。'));
       for(const [name,url] of Object.entries(EFFECTS))this.loadEffect(name,url);
@@ -35,7 +36,7 @@ export class FairSoundscape {
     element.dataset.hi3dAudio=name;element.setAttribute('aria-hidden','true');document.body.appendChild(element);
     const source=this.context.createMediaElementSource(element),gain=this.context.createGain(),analyser=this.context.createAnalyser();
     analyser.fftSize=256;gain.gain.value=0;source.connect(gain);gain.connect(analyser);analyser.connect(this.output);
-    element.addEventListener('error',()=>this.warning(name,`${name==='music'?'背景音乐':'人群氛围'}未能加载；游戏可继续，关闭再开启声音可重试。`));
+    element.addEventListener('error',()=>this.warning(name,`${name==='music'?'背景音乐':name==='children'?'孩童嬉闹声':'人群氛围'}未能加载；游戏可继续，关闭再开启声音可重试。`));
     return {element,gain,analyser,pending:false};
   }
   warning(key,message) {if(!this.warned.has(key)){this.warned.add(key);this.onWarning(message);}}
@@ -61,7 +62,7 @@ export class FairSoundscape {
       this.stop();
       return;
     }
-    for(const bus of [this.music,this.crowd]) {
+    for(const bus of [this.music,this.crowd,this.children]) {
       if(bus.element.error)bus.element.load();
       if(bus.element.paused&&!bus.pending) {
         bus.pending=true;
@@ -70,15 +71,16 @@ export class FairSoundscape {
         }).finally(()=>{bus.pending=false;if(!this.playing)bus.element.pause();});
       }
     }
-    const target=phase==='playing'?.10:.065;
+    const target=phase==='playing'?.05:.0325;
     this.music.gain.gain.cancelScheduledValues(t);this.music.gain.gain.setTargetAtTime(t<this.duckUntil?target*.5:target,t,.3);
     if(t<this.duckUntil)this.music.gain.gain.setTargetAtTime(target,this.duckUntil,.25);
-    this.crowd.gain.gain.cancelScheduledValues(t);this.crowd.gain.gain.setTargetAtTime(phase==='playing'?.12:.07,t,.4);
+    this.children.gain.gain.cancelScheduledValues(t);this.children.gain.gain.setTargetAtTime(phase==='playing'?.06:.035,t,.4);
+    this.crowd.gain.gain.cancelScheduledValues(t);this.crowd.gain.gain.setTargetAtTime(phase==='playing'?.06:.035,t,.4);
   }
   stop() {
     this.playing=false;
     if(!this.context)return;
-    for(const bus of [this.music,this.crowd])if(bus) {
+    for(const bus of [this.music,this.crowd,this.children])if(bus) {
       bus.element.pause();bus.gain.gain.cancelScheduledValues(this.context.currentTime);bus.gain.gain.value=0;
     }
     for(const source of this.active){try{source.stop();}catch{}}
@@ -90,8 +92,8 @@ export class FairSoundscape {
     if(name==='applause') {
       this.duckUntil=t+.75;
       const gain=this.music.gain.gain;
-      gain.cancelScheduledValues(t);gain.setTargetAtTime(.045,t,.025);
-      gain.setTargetAtTime(this.phase==='playing'?.10:.065,t+.7,.25);
+      gain.cancelScheduledValues(t);gain.setTargetAtTime(.0225,t,.025);
+      gain.setTargetAtTime(this.phase==='playing'?.05:.0325,t+.7,.25);
       if(t-this.lastApplause<2)return;
       this.lastApplause=t;
     }
@@ -107,6 +109,6 @@ export class FairSoundscape {
       return {paused:value.element.paused,time:value.element.currentTime,readyState:value.element.readyState,
         gain:value.gain.gain.value,rms:Math.sqrt(samples.reduce((sum,v)=>sum+v*v,0)/samples.length)};
     };
-    return {enabled:this.enabled,phase:this.phase,context:this.context?.state??'locked',effects:this.buffers.size,music:bus(this.music),crowd:bus(this.crowd)};
+    return {enabled:this.enabled,phase:this.phase,context:this.context?.state??'locked',effects:this.buffers.size,music:bus(this.music),crowd:bus(this.crowd),children:bus(this.children)};
   }
 }
